@@ -9,7 +9,7 @@
  *  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
- *
+ *  Version .13
  */
 metadata {
 	definition (name: "Cooper Aspire Scene Controller RFWC5 RFWC5D", namespace: "saains", author: "Scott Ainsworth") {
@@ -172,9 +172,9 @@ def zwaveEvent(physicalgraph.zwave.commands.sceneactivationv1.SceneActivationSet
         //log.debug "$ino is $onoff , piorOnoff is:$priorOnoff ibit is $ibit"
         if (onoff != priorOnoff){
         //log.debug "$ino first if true"
-            if (onoff) { log.debug "$ino second if true"
+            if (onoff) { //log.debug "$ino second if true"
                event = createEvent(name: "Indicator$ino", value: "On", descriptionText: "$device.label Indicator:$ino On", linkText: "$device.label Indicator:$ino on")
-            } else { log.debug "$ino second if false"
+            } else { //log.debug "$ino second if false"
                 event = createEvent(name: "Indicator$ino", value: "Off", descriptionText: "$device.label Indicator:$ino Off", linkText: "$device.label Indicator:$ino off")
             }
         event2 = createEvent(name:"button",value:"pushed",data:[buttonNumber: ino],descriptionText:"$device.displayName button $ino pushed",linkText:"$device.label Button:$ino pushed",isStateChange: true)
@@ -208,14 +208,14 @@ def configure() {
     def s3 = 253
     def s4 = 254
     def s5 = 255
-  log.debug "s2 is $s1"
+
     
     if (sceneNum1) s1 = sceneNum1
     if (sceneNum2) s2 = sceneNum2
     if (sceneNum3) s3 = sceneNum3
     if (sceneNum4) s4 = sceneNum4
     if (sceneNum5) s5 = sceneNum5
-    log.debug "s2 is now $s1"
+
     //will use 0 for dimming durations unless a value is entered
     def d1 = 0x00
     def d2 = 0x00
@@ -249,6 +249,7 @@ cmds << zwave.sceneControllerConfV1.sceneControllerConfGet(groupId:5).format()
 // send commands
 
 log.debug "$cmds"
+log.debug "Please Wait this can take a few minutes"
 delayBetween(cmds,3000)
 }
 
@@ -263,7 +264,7 @@ def alists = []
 def atlist = []
 def amap = [level:0, anodes: []]
 
-log.debug "assoclist is:$assoclist"
+//log.debug "assoclist is:$assoclist"
 
 //add clear associaton cmd to the list
 cmds << zwave.associationV1.associationRemove(groupingIdentifier: btn, nodeId:[]).format()
@@ -271,7 +272,7 @@ cmds << zwave.associationV1.associationRemove(groupingIdentifier: btn, nodeId:[]
 // add the levels to the data structure.
 if (assoclist) {
 	atlist = assoclist.tokenize(', ')
-     log.debug "atlist is: $atlist"
+    // log.debug "atlist is: $atlist"
 	lList = atlist.size()
 	for (int i = 1; i <= lList; i+=2) {
 		if(alist.every { it != atlist[i]}) {	alist << atlist[i] } // if the value is not in alist then add it.
@@ -287,30 +288,39 @@ if (assoclist) {
             if (bob.level == atlist[i]) {bob.anodes << atlist[i-1]}
             }
        }
-      log.debug "alists is now: $alists"
+     // log.debug "alists is now: $alists"
    }
 // for each list of ids
 // <<create association set commands
 // <<create configuration set commands
 	for (int i = 0; i <=alists.size(); i++){
    
-    def bob = alists[i]
+    def thisset = alists[i]
     def nodestring = ""
-    def thislevel = 0xFF
-     log.debug "alists i is $bob"
-    if (bob){
-    nodestring = bob.anodes.join(", ")
-    thislevel = [bob.level.value]}
-    
-
-    cmds << AssocNodes(nodestring,btn,1)
-    cmds << zwave.configurationV1.configurationSet(parameterNumber:btn, size:1, configurationValue: [thislevel]).format()
+    def thislevel = [0x32]
+    //log.debug "alists $i is $thisset"
+    if (thisset){
+    	def alevel = thisset.level as int
+    	nodestring = thisset.anodes.join(", ")
+        //log.debug "nodestring is: $nodestring"
+        //log.debug "xxxx $thisset.level.value"
+        if (alevel <= 100 && alevel >= 0){        	
+    		thislevel[0] = thisset.level as int
+            }
+        if (alevel == 255){
+        	thislevel[0] = thisset.level as int
+            }
+    	//log.debug "thislevel $i is $thislevel"
+    	}
+    cmds << AssocNodes(nodestring,btn,0)
+    	log.debug "setting configuration commands for button:$btn Level:$thislevel"        
+    cmds << zwave.configurationV1.configurationSet(parameterNumber:btn, size:1, configurationValue: thislevel).format()
 	}
 // <<scene set commands
 // <<create association set commands for scenes
 
-log.debug "passing to scene command $btn  and  $scene  and  $dimdur"
 cmds << zwave.sceneControllerConfV1.sceneControllerConfSet(groupId:btn, sceneId:scene, dimmingDuration:dimdur).format()
+log.debug "setting scene commands for button:$btn scene:$scene dimmingduration:$dimdur"
 cmds << AssocNodes(scenelist, btn, 1)
 
 return (cmds)
@@ -326,6 +336,7 @@ def CheckIndicators(){
 }
 def initialize() {
 	sendEvent(name: "numberOfButtons", value: 5)
+    state.lastindval = 0
 }
 
 def installed() {
@@ -363,7 +374,7 @@ else if (hub){
 	List3 = zwaveHubNodeId
 	}
 
-log.debug "associating group $group: $List3"
+log.debug "associating group for button:$group: $List3"
 
 cmd = zwave.associationV1.associationSet(groupingIdentifier:group, nodeId:List3).format()
 
